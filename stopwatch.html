@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stopwatch Minimalist</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, #25252c 0, #101014 45%, #050506 100%);
+            font-family: "Helvetica Neue", sans-serif;
+        }
+
+        #backdropImage,
+        #backdropVideo,
+        #backgroundImage,
+        #foregroundVideo {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #backdropImage,
+        #backdropVideo {
+            object-fit: cover;
+            transform: scale(1.04);
+            filter: blur(8px);
+            opacity: 0.7;
+        }
+
+        #backgroundImage,
+        #foregroundVideo {
+            object-fit: contain;
+            object-position: 50% 50%;
+            transform: scale(1, 1);
+            transform-origin: center;
+        }
+
+        .media-hidden {
+            display: none;
+        }
+
+        .container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: 2;
+            --clock-scale: 1;
+            padding: 20px;
+            border-radius: 20px;
+            color: rgba(238, 88, 196, 0.947);
+            text-align: center;
+            transform: translate(-50%, -50%);
+            cursor: move;
+            user-select: none;
+        }
+
+        .mode-switch {
+            display: inline-flex;
+            margin-bottom: 8px;
+            padding: 3px;
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.24);
+            opacity: 0.2;
+            transition: opacity 0.2s ease;
+        }
+
+        .container:hover .mode-switch,
+        .mode-switch:focus-within {
+            opacity: 1;
+        }
+
+        .mode-switch button {
+            padding: 4px 10px;
+            border: 0;
+            color: rgba(255, 255, 255, 0.55);
+            font-size: calc(0.68rem * var(--clock-scale));
+        }
+
+        .mode-switch button.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        #display {
+            margin-bottom: 4px;
+            font-size: calc(5rem * var(--clock-scale));
+            font-weight: 100;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -2px;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #dateDisplay {
+            min-height: 20px;
+            margin-bottom: 16px;
+            color: rgba(255, 255, 255, 0.72);
+            font-size: calc(0.85rem * var(--clock-scale));
+            text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+        }
+
+        .resize-handle {
+            position: absolute;
+            right: 6px;
+            bottom: 6px;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            border: 0;
+            border-right: 2px solid rgba(255, 255, 255, 0.55);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.55);
+            border-radius: 0;
+            background: transparent;
+            cursor: nwse-resize;
+            opacity: 0.35;
+        }
+
+        .resize-handle:hover {
+            background: transparent;
+            opacity: 1;
+        }
+
+        .stopwatch-actions.hidden {
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        button {
+            padding: 8px 20px;
+            margin: 0 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.12);
+            color: rgb(249, 133, 16);
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+
+        .floating-controls {
+            position: fixed;
+            bottom: 16px;
+            z-index: 3;
+            width: 62px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.58);
+            color: white;
+            font-size: 0.75rem;
+            opacity: 0.16;
+            transition: width 0.2s ease, opacity 0.25s ease, background 0.25s ease;
+            backdrop-filter: blur(8px);
+        }
+
+        .image-controls {
+            right: 16px;
+        }
+
+        .clock-controls {
+            left: 16px;
+            width: 78px;
+        }
+
+        .floating-controls[open] {
+            width: 235px;
+        }
+
+        .floating-controls:hover,
+        .floating-controls:focus-within,
+        .floating-controls[open] {
+            opacity: 1;
+            background: rgba(0, 0, 0, 0.74);
+        }
+
+        .floating-controls summary {
+            padding: 9px 12px;
+            color: rgba(255, 255, 255, 0.9);
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .floating-controls summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .control-panel {
+            padding: 2px 12px 12px;
+        }
+
+        .control-title {
+            margin: 8px 0 6px;
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 0.68rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .paste-status {
+            min-height: 14px;
+            margin-top: 8px;
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 0.68rem;
+        }
+
+        .image-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .image-row input[type="text"] {
+            min-width: 0;
+            flex: 1;
+            padding: 7px 9px;
+            border: 0;
+            border-radius: 8px;
+        }
+
+        .floating-controls button {
+            margin: 0;
+            padding: 6px 10px;
+        }
+
+        .floating-controls label {
+            display: grid;
+            grid-template-columns: 45px 1fr;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .floating-controls input[type="range"] {
+            width: 100%;
+        }
+
+        .color-setting {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        #clockColorInput {
+            width: 42px;
+            height: 30px;
+            padding: 0;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .color-presets {
+            display: flex;
+            gap: 7px;
+            margin-top: 10px;
+        }
+
+        .color-presets button {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            border-radius: 50%;
+            background: var(--preset-color);
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 7px;
+        }
+
+        .setting-row input {
+            accent-color: rgb(249, 133, 16);
+        }
+
+        .setting-status {
+            margin-top: 5px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.66rem;
+            line-height: 1.35;
+        }
+
+        @media (max-width: 600px) {
+            #display {
+                font-size: calc(3.5rem * var(--clock-scale));
+            }
+
+            .image-controls {
+                right: 10px;
+                bottom: 10px;
+            }
+
+            .clock-controls {
+                left: 10px;
+                bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <img id="backdropImage" alt="">
+    <video id="backdropVideo" class="media-hidden" autoplay muted loop playsinline></video>
+    <img id="backgroundImage" alt="">
+    <video id="foregroundVideo" class="media-hidden" autoplay muted loop playsinline></video>
+
+    <div class="container" id="dragContainer">
+        <div class="mode-switch">
+            <button type="button" class="active" data-mode="stopwatch">Stopwatch</button>
+            <button type="button" data-mode="clock">Clock</button>
+        </div>
+        <div id="display">00:00:00</div>
+        <div id="dateDisplay"></div>
+        <div class="stopwatch-actions" id="stopwatchActions">
+            <button type="button" onclick="startStop()" id="startBtn">Start</button>
+            <button type="button" onclick="resetStopwatch()">Reset</button>
+        </div>
+        <button type="button" class="resize-handle" id="resizeHandle" aria-label="Resize clock"></button>
+    </div>
+
+    <details class="floating-controls clock-controls">
+        <summary>Đồng hồ</summary>
+        <div class="control-panel">
+            <div class="control-title">Màu chữ</div>
+            <div class="color-setting">
+                <span>Chọn màu</span>
+                <input type="color" id="clockColorInput" value="#ee58c4">
+            </div>
+            <div class="color-presets">
+                <button type="button" data-clock-color="#ee58c4" style="--preset-color: #ee58c4" aria-label="Hồng"></button>
+                <button type="button" data-clock-color="#ffffff" style="--preset-color: #ffffff" aria-label="Trắng"></button>
+                <button type="button" data-clock-color="#f98510" style="--preset-color: #f98510" aria-label="Cam"></button>
+                <button type="button" data-clock-color="#67e8f9" style="--preset-color: #67e8f9" aria-label="Xanh"></button>
+                <button type="button" data-clock-color="#a3ff70" style="--preset-color: #a3ff70" aria-label="Xanh lá"></button>
+            </div>
+            <div class="control-title">Kích thước</div>
+            <label>Kích thước <input type="range" id="clockSizeInput" min="50" max="200" value="100"></label>
+        </div>
+    </details>
+
+    <details class="floating-controls image-controls">
+        <summary>Ảnh</summary>
+        <div class="control-panel">
+            <div class="control-title">Nền</div>
+            <div class="image-row">
+                <button type="button" id="chooseBackdropBtn">Chọn media</button>
+                <button type="button" id="pasteBackdropBtn">Dán</button>
+                <button type="button" id="clearBackdropBtn">Xóa</button>
+                <input type="file" id="backdropFileInput" accept="image/*,video/*" hidden>
+            </div>
+            <div class="image-row">
+                <input type="text" id="backdropUrlInput" placeholder="Link ảnh/video nền">
+                <button type="button" id="openBackdropUrlBtn">Mở</button>
+            </div>
+            <label>Mờ <input type="range" id="backdropOpacityInput" min="10" max="100" value="70"></label>
+            <label>Nhòe <input type="range" id="backdropBlurInput" min="0" max="30" value="8"></label>
+
+            <div class="control-title">Ảnh chính</div>
+            <div class="image-row">
+                <button type="button" id="chooseImageBtn">Chọn media</button>
+                <button type="button" id="pasteImageBtn">Dán</button>
+                <button type="button" id="resetImageBtn">Mặc định</button>
+                <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+            </div>
+            <div class="image-row">
+                <input type="text" id="urlInput" placeholder="Link ảnh/video chính">
+                <button type="button" id="openUrlBtn">Mở</button>
+            </div>
+            <label>Rộng <input type="range" id="widthInput" min="30" max="200" value="100"></label>
+            <label>Cao <input type="range" id="heightInput" min="30" max="200" value="100"></label>
+            <label>Ngang <input type="range" id="xInput" min="-50" max="50" value="0"></label>
+            <label>Dọc <input type="range" id="yInput" min="-50" max="50" value="0"></label>
+            <div class="paste-status" id="pasteStatus">Ctrl+V: dán media vào layer chính</div>
+
+            <div class="control-title">Cài đặt</div>
+            <div class="setting-row">
+                <span>Giữ màn hình sáng</span>
+                <input type="checkbox" id="wakeLockInput">
+            </div>
+            <div class="setting-status" id="wakeLockStatus">Đang tắt</div>
+        </div>
+    </details>
+
+    <script>
+        let startTime = 0;
+        let timerId;
+        let running = false;
+        let savedTime = 0;
+        let currentMode = "stopwatch";
+        let clockTimerId;
+
+        const display = document.getElementById("display");
+        const dateDisplay = document.getElementById("dateDisplay");
+        const stopwatchActions = document.getElementById("stopwatchActions");
+        const clockColorInput = document.getElementById("clockColorInput");
+        const clockSizeInput = document.getElementById("clockSizeInput");
+        const resizeHandle = document.getElementById("resizeHandle");
+        const dragContainer = document.getElementById("dragContainer");
+
+        function setClockScale(scale) {
+            const boundedScale = Math.min(2, Math.max(0.5, scale));
+            dragContainer.style.setProperty("--clock-scale", boundedScale);
+            clockSizeInput.value = Math.round(boundedScale * 100);
+        }
+
+        clockSizeInput.addEventListener("input", function () {
+            setClockScale(Number(clockSizeInput.value) / 100);
+        });
+
+        function setClockColor(color) {
+            display.style.color = color;
+            clockColorInput.value = color;
+        }
+
+        clockColorInput.addEventListener("input", function () {
+            setClockColor(clockColorInput.value);
+        });
+
+        document.querySelectorAll("[data-clock-color]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                setClockColor(button.dataset.clockColor);
+            });
+        });
+
+        function startStop() {
+            const button = document.getElementById("startBtn");
+
+            if (!running) {
+                startTime = performance.now() - savedTime;
+                timerId = setInterval(showTime, 100);
+                running = true;
+                button.textContent = "Stop";
+            } else {
+                savedTime = performance.now() - startTime;
+                clearInterval(timerId);
+                running = false;
+                button.textContent = "Start";
+            }
+        }
+
+        function showTime() {
+            const difference = performance.now() - startTime;
+            const hours = Math.floor(difference / 3600000);
+            const minutes = Math.floor((difference % 3600000) / 60000);
+            const seconds = Math.floor((difference % 60000) / 1000);
+
+            if (currentMode !== "stopwatch") return;
+
+            display.textContent =
+                String(hours).padStart(2, "0") + ":" +
+                String(minutes).padStart(2, "0") + ":" +
+                String(seconds).padStart(2, "0");
+        }
+
+        function resetStopwatch() {
+            clearInterval(timerId);
+            running = false;
+            savedTime = 0;
+            if (currentMode === "stopwatch") display.textContent = "00:00:00";
+            document.getElementById("startBtn").textContent = "Start";
+        }
+
+        function showClock() {
+            const now = new Date();
+            display.textContent = now.toLocaleTimeString("vi-VN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false
+            });
+            dateDisplay.textContent = now.toLocaleDateString("vi-VN", {
+                weekday: "long",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric"
+            });
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            clearInterval(clockTimerId);
+
+            document.querySelectorAll("[data-mode]").forEach(function (button) {
+                button.classList.toggle("active", button.dataset.mode === mode);
+            });
+
+            if (mode === "clock") {
+                stopwatchActions.classList.add("hidden");
+                showClock();
+                clockTimerId = setInterval(showClock, 250);
+            } else {
+                stopwatchActions.classList.remove("hidden");
+                dateDisplay.textContent = "";
+                if (running) {
+                    showTime();
+                } else {
+                    const hours = Math.floor(savedTime / 3600000);
+                    const minutes = Math.floor((savedTime % 3600000) / 60000);
+                    const seconds = Math.floor((savedTime % 60000) / 1000);
+                    display.textContent =
+                        String(hours).padStart(2, "0") + ":" +
+                        String(minutes).padStart(2, "0") + ":" +
+                        String(seconds).padStart(2, "0");
+                }
+            }
+        }
+
+        document.querySelectorAll("[data-mode]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                switchMode(button.dataset.mode);
+            });
+        });
+
+        const wakeLockInput = document.getElementById("wakeLockInput");
+        const wakeLockStatus = document.getElementById("wakeLockStatus");
+        let wakeLock = null;
+
+        function setWakeLockStatus(message) {
+            wakeLockStatus.textContent = message;
+        }
+
+        async function enableWakeLock() {
+            if (!("wakeLock" in navigator)) {
+                wakeLockInput.checked = false;
+                setWakeLockStatus("Trình duyệt này không hỗ trợ Keep screen on");
+                return;
+            }
+
+            try {
+                wakeLock = await navigator.wakeLock.request("screen");
+                setWakeLockStatus("Đang giữ màn hình sáng");
+
+                wakeLock.addEventListener("release", function () {
+                    wakeLock = null;
+                    if (wakeLockInput.checked && document.visibilityState === "visible") {
+                        setWakeLockStatus("Wake Lock đã bị hệ thống ngắt");
+                    }
+                });
+            } catch (error) {
+                wakeLockInput.checked = false;
+                setWakeLockStatus("Không thể bật. Hãy mở bằng HTTPS hoặc localhost");
+            }
+        }
+
+        async function disableWakeLock() {
+            if (wakeLock) {
+                await wakeLock.release();
+                wakeLock = null;
+            }
+            setWakeLockStatus("Đang tắt");
+        }
+
+        wakeLockInput.addEventListener("change", function () {
+            if (wakeLockInput.checked) {
+                enableWakeLock();
+            } else {
+                disableWakeLock();
+            }
+        });
+
+        document.addEventListener("visibilitychange", function () {
+            if (
+                document.visibilityState === "visible" &&
+                wakeLockInput.checked &&
+                !wakeLock
+            ) {
+                enableWakeLock();
+            }
+        });
+
+        const backdropImage = document.getElementById("backdropImage");
+        const backdropVideo = document.getElementById("backdropVideo");
+        const backgroundImage = document.getElementById("backgroundImage");
+        const foregroundVideo = document.getElementById("foregroundVideo");
+        const backdropFileInput = document.getElementById("backdropFileInput");
+        const backdropUrlInput = document.getElementById("backdropUrlInput");
+        const backdropOpacityInput = document.getElementById("backdropOpacityInput");
+        const backdropBlurInput = document.getElementById("backdropBlurInput");
+        const fileInput = document.getElementById("fileInput");
+        const urlInput = document.getElementById("urlInput");
+        const widthInput = document.getElementById("widthInput");
+        const heightInput = document.getElementById("heightInput");
+        const xInput = document.getElementById("xInput");
+        const yInput = document.getElementById("yInput");
+        const pasteStatus = document.getElementById("pasteStatus");
+        let localBackdropUrl = "";
+        let localImageUrl = "";
+        let pasteTarget = "main";
+
+        function isVideoUrl(url) {
+            return /\.(mp4|webm|ogg|ogv|mov|m4v)(?:[?#]|$)/i.test(url);
+        }
+
+        function showMedia(source, isVideo, target) {
+            const image = target === "backdrop" ? backdropImage : backgroundImage;
+            const video = target === "backdrop" ? backdropVideo : foregroundVideo;
+
+            if (isVideo) {
+                image.classList.add("media-hidden");
+                image.removeAttribute("src");
+                video.classList.remove("media-hidden");
+                video.src = source;
+                video.load();
+                video.play().catch(function () {
+                    pasteStatus.textContent = "Chạm vào trang để cho phép phát video";
+                });
+            } else {
+                video.pause();
+                video.classList.add("media-hidden");
+                video.removeAttribute("src");
+                image.classList.remove("media-hidden");
+                image.src = source;
+            }
+        }
+
+        function showLocalMedia(file, target) {
+            if (!file || !/^(image|video)\//.test(file.type)) return false;
+
+            if (target === "backdrop") {
+                if (localBackdropUrl) URL.revokeObjectURL(localBackdropUrl);
+                localBackdropUrl = URL.createObjectURL(file);
+                showMedia(localBackdropUrl, file.type.startsWith("video/"), target);
+            } else {
+                if (localImageUrl) URL.revokeObjectURL(localImageUrl);
+                localImageUrl = URL.createObjectURL(file);
+                showMedia(localImageUrl, file.type.startsWith("video/"), target);
+            }
+
+            pasteStatus.textContent =
+                target === "backdrop" ? "Đã đặt media nền" : "Đã đặt media chính";
+            return true;
+        }
+
+        async function pasteFromClipboard(target) {
+            pasteTarget = target;
+            pasteStatus.textContent = "Đang đọc clipboard...";
+
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                pasteStatus.textContent = "Nhấn Ctrl+V để dán vào layer đã chọn";
+                return;
+            }
+
+            try {
+                const items = await navigator.clipboard.read();
+
+                for (const item of items) {
+                    const mediaType = item.types.find(function (type) {
+                        return /^(image|video)\//.test(type);
+                    });
+
+                    if (mediaType) {
+                        showLocalMedia(await item.getType(mediaType), target);
+                        return;
+                    }
+                }
+
+                pasteStatus.textContent = "Clipboard không có ảnh hoặc video";
+            } catch (error) {
+                pasteStatus.textContent = "Nhấn Ctrl+V để dán vào layer đã chọn";
+            }
+        }
+
+        document.getElementById("chooseBackdropBtn").addEventListener("click", function () {
+            backdropFileInput.click();
+        });
+
+        backdropFileInput.addEventListener("change", function () {
+            const file = backdropFileInput.files[0];
+            if (!file) return;
+            showLocalMedia(file, "backdrop");
+        });
+
+        document.getElementById("pasteBackdropBtn").addEventListener("click", function () {
+            pasteFromClipboard("backdrop");
+        });
+
+        function loadBackdropUrl() {
+            const url = backdropUrlInput.value.trim();
+            if (!url) return;
+            showMedia(url, isVideoUrl(url), "backdrop");
+            backdropUrlInput.value = "";
+        }
+
+        document.getElementById("openBackdropUrlBtn").addEventListener("click", loadBackdropUrl);
+        backdropUrlInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") loadBackdropUrl();
+        });
+
+        function updateBackdrop() {
+            [backdropImage, backdropVideo].forEach(function (media) {
+                media.style.opacity = backdropOpacityInput.value / 100;
+                media.style.filter = "blur(" + backdropBlurInput.value + "px)";
+            });
+        }
+
+        [backdropOpacityInput, backdropBlurInput].forEach(function (input) {
+            input.addEventListener("input", updateBackdrop);
+        });
+
+        document.getElementById("clearBackdropBtn").addEventListener("click", function () {
+            backdropImage.removeAttribute("src");
+            backdropVideo.pause();
+            backdropVideo.removeAttribute("src");
+        });
+
+        document.getElementById("chooseImageBtn").addEventListener("click", function () {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener("change", function () {
+            const file = fileInput.files[0];
+            if (!file) return;
+            showLocalMedia(file, "main");
+        });
+
+        document.getElementById("pasteImageBtn").addEventListener("click", function () {
+            pasteFromClipboard("main");
+        });
+
+        function loadUrl() {
+            const url = urlInput.value.trim();
+            if (!url) return;
+            showMedia(url, isVideoUrl(url), "main");
+            urlInput.value = "";
+        }
+
+        document.getElementById("openUrlBtn").addEventListener("click", loadUrl);
+        urlInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") loadUrl();
+        });
+
+        function updateImageFrame() {
+            [backgroundImage, foregroundVideo].forEach(function (media) {
+                media.style.transform =
+                    "translate(" + xInput.value + "vw, " + yInput.value + "vh) " +
+                    "scale(" + widthInput.value / 100 + ", " + heightInput.value / 100 + ")";
+                media.style.objectPosition = "50% 50%";
+            });
+        }
+
+        [widthInput, heightInput, xInput, yInput].forEach(function (input) {
+            input.addEventListener("input", updateImageFrame);
+        });
+
+        document.getElementById("resetImageBtn").addEventListener("click", function () {
+            widthInput.value = 100;
+            heightInput.value = 100;
+            xInput.value = 0;
+            yInput.value = 0;
+            updateImageFrame();
+        });
+
+        document.addEventListener("paste", function (event) {
+            const items = Array.from(event.clipboardData?.items || []);
+            const mediaItem = items.find(function (item) {
+                return /^(image|video)\//.test(item.type);
+            });
+
+            if (!mediaItem) return;
+            event.preventDefault();
+            showLocalMedia(mediaItem.getAsFile(), pasteTarget);
+        });
+
+        let isDragging = false;
+        let startX;
+        let startY;
+        let initialX;
+        let initialY;
+        let isResizing = false;
+        let resizeStartX;
+        let resizeStartScale;
+
+        resizeHandle.addEventListener("pointerdown", function (event) {
+            event.stopPropagation();
+            isResizing = true;
+            resizeStartX = event.clientX;
+            resizeStartScale = Number.parseFloat(
+                getComputedStyle(dragContainer).getPropertyValue("--clock-scale")
+            ) || 1;
+            resizeHandle.setPointerCapture(event.pointerId);
+        });
+
+        resizeHandle.addEventListener("pointermove", function (event) {
+            if (!isResizing) return;
+            setClockScale(resizeStartScale + (event.clientX - resizeStartX) / 180);
+        });
+
+        resizeHandle.addEventListener("pointerup", function () {
+            isResizing = false;
+        });
+
+        resizeHandle.addEventListener("pointercancel", function () {
+            isResizing = false;
+        });
+
+        dragContainer.addEventListener("pointerdown", function (event) {
+            if (event.target.tagName === "BUTTON" || isResizing) return;
+
+            isDragging = true;
+            startX = event.clientX;
+            startY = event.clientY;
+
+            const rect = dragContainer.getBoundingClientRect();
+            initialX = rect.left;
+            initialY = rect.top;
+            dragContainer.style.transform = "none";
+            dragContainer.style.left = initialX + "px";
+            dragContainer.style.top = initialY + "px";
+            dragContainer.setPointerCapture(event.pointerId);
+        });
+
+        dragContainer.addEventListener("pointermove", function (event) {
+            if (!isDragging) return;
+            dragContainer.style.left = initialX + event.clientX - startX + "px";
+            dragContainer.style.top = initialY + event.clientY - startY + "px";
+        });
+        dragContainer.addEventListener("pointerup", function () {
+            isDragging = false;
+        });
+
+        dragContainer.addEventListener("pointercancel", function () {
+            isDragging = false;
+        });
+    </script>
+</body>
+</html>
